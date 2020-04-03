@@ -701,3 +701,23 @@ def sum_node_list(node_list):
     from operator import add
     from functools import reduce
     return reduce(add, node_list)
+
+
+if __name__ == '__main__':
+    x = Variable(name='x')
+    w = Variable(name='w')
+    b = Variable(name='b')
+    y_ = Variable(name='y')
+
+    y = matmul(x, w) + b
+    L = square(y - y_)
+
+    w_grad, b_grad = gradients(L, [w, b])
+    executor = Executor([L, y, w_grad, b])
+
+    x_val = np.array([[3, 2], [1, 1], [1, 1]])
+    w_val = np.array([[2], [1]])
+    b_val = np.array([[1], [2], [3]])
+    y_val = np.array([[0], [1], [1]])
+    a, b, c, d = executor.run(feed_dict={w: w_val, x: x_val, y_: y_val, b: b_val})
+    print()

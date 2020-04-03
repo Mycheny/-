@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import threading
 import three_d.freeTypeFont as glFreeType
+from AutodiffEngine.gradient import gradient_color
 
 IS_PERSPECTIVE = True  # 透视投影
 VIEW = np.array([-0.8, 0.8, -0.8, 0.8, 0.5, 50.0])  # 视景体的left/right/bottom/top/near/far六个面
@@ -23,14 +24,22 @@ WIN_W, WIN_H = 640, 480  # 保存窗口宽度和高度的变量
 LEFT_IS_DOWNED = False  # 鼠标左键被按下
 MOUSE_X, MOUSE_Y = 0, 0  # 考察鼠标位移量时保存的起始位置
 
-R = np.hstack((np.linspace(200, 255, 127), np.linspace(255, 47, 128)))[::-1] / 255
-G = np.hstack((np.linspace(3, 255, 127), np.linspace(255, 47, 128)))[::-1] / 255
-B = np.hstack((np.linspace(33, 200, 127), np.hstack((np.linspace(220, 255, 25), np.linspace(255, 150, 103)))))[
-    ::-1] / 255
+input_colors = ["#b93f43", "#e4b1b6", "#037ee4"]
+colors = gradient_color(input_colors, color_sum=300)
+colors = np.array(colors)[:255, :] / 255
+R = colors[:, 0]
+G = colors[:, 1]
+B = colors[:, 2]
+
+# R = np.hstack((np.linspace(200, 255, 127), np.linspace(255, 47, 128)))[::-1] / 255
+# G = np.hstack((np.linspace(3, 255, 127), np.linspace(255, 47, 128)))[::-1] / 255
+# B = np.hstack((np.linspace(33, 200, 127), np.hstack((np.linspace(220, 255, 25), np.linspace(255, 150, 103)))))[
+#     ::-1] / 255
 A = np.ones(255, dtype=np.float) * 0.5
 TAG_XYZ = [0.0, -0.2, 0.0]
 loss_mean, loss_std = None, None
 tracks = []  # 轨迹
+
 
 def getposture():
     global EYE, LOOK_AT
@@ -64,26 +73,26 @@ def getColor(scale):
 
 
 def start_draw():
-    global w0, w1, loss, TAG_XYZ, vbo_vertices, vbo_indices, tracks
+    global w0, w1, loss, TAG_XYZ, vbo_vertices, vbo_indices, tracks, scope
     XYZ = copy.deepcopy(TAG_XYZ)
     tracks.append(XYZ)
 
     # 绘制方形轨迹
-    # size = 10.0
-    # glPointSize(size)
-    # glBegin(GL_POINTS)
-    # glColor4f(0.0, 1.0, 0.0, 1.0)
-    # # glVertex3f(XYZ[0], XYZ[1] + size / 5, XYZ[2])
-    # glVertex3f(XYZ[0], XYZ[1], XYZ[2])
-    # glEnd()
+    size = 10.0
+    glPointSize(size)
+    glBegin(GL_POINTS)
+    glColor4f(0.0, 1.0, 0.0, 1.0)
+    # glVertex3f(XYZ[0], XYZ[1] + size / 5, XYZ[2])
+    glVertex3f(XYZ[0], XYZ[1], XYZ[2])
+    glEnd()
 
     # 绘制球形轨迹
-    glPushMatrix()
-    glTranslatef(XYZ[0], XYZ[1], XYZ[2])
-    glColor4f(0,1,1,1)
-    # glutWireSphere(0.5, 10, 10)
-    glutSolidSphere(0.5, 10, 10)
-    glPopMatrix()
+    # glPushMatrix()
+    # glTranslatef(XYZ[0], XYZ[1], XYZ[2])
+    # glColor4f(0, 1, 1, 1)
+    # glutWireSphere(scope * 0.08, 10, 10)
+    # # glutSolidSphere(scope*0.08, 10, 10)
+    # glPopMatrix()
 
     # 绘制曲面
     vbo_vertices.bind()
@@ -96,12 +105,11 @@ def start_draw():
     vbo_indices.unbind()
 
     # 绘制轨迹
-
     glEnable(GL_BLEND)
     # glEnable(GL_LINE_SMOOTH)
     glLineWidth(2.0)
     glBegin(GL_LINES)  # 开始绘制线段（世界坐标系）
-    glColor4f(0.0, 0.0, 1.0, 1.0)  # 设置当前颜色为红色不透明
+    glColor4f(0.9, 0.9, 0.9, 1.0)  # 设置当前颜色为红色不透明
     for i in range(len(tracks) - 1):
         glVertex3f(tracks[i][0], float(tracks[i][1]), tracks[i][2])
         glVertex3f(tracks[i + 1][0], float(tracks[i + 1][1]), tracks[i + 1][2])
@@ -293,7 +301,7 @@ def test_accuracy(_w, _X, _Y):
 
 
 def gen_2d_data(n):
-    np.random.seed(1)
+    np.random.seed(3)
     x_data = np.random.random([n, 1])
     y_data = np.ones(n)
     for i in range(n):
@@ -306,9 +314,34 @@ def gen_2d_data(n):
 
 
 def gen_2d_data2(n):
-    np.random.seed(1)
-    x_data = np.random.random([n, 2])*2-1
-    y_data = 1-np.round(np.mean(np.square(x_data), axis=1), decimals=0)
+    np.random.seed()
+    x_data = np.random.random([n, 2]) * 4 - 2
+
+    # w = np.random.random_integers(-5, 5, [2, 1])/1.0
+    # b = np.random.random_integers(-100, 100, [1])/100
+    # print(f"W = {w} b = {b}")
+    # hidden = np.matmul(x_data, w)[:, 0] + b
+    # y_data = 1 / (1 + np.exp(-hidden))
+
+    y_data = np.where(np.sum(x_data, axis=1) > 0, 0, 1)
+
+    # y_data = 1 - np.round(np.mean(np.square(x_data), axis=1), decimals=0)
+    return x_data, y_data
+
+def gen_2d_data3(n):
+    np.random.seed()
+    x_data1 = np.random.rand(int(n/2), 2)*0.2+0.2
+    x_data2 = np.random.rand(int(n/2), 2)*0.2+0.7
+    x_data = np.concatenate((x_data1, x_data2))
+
+    y_data1 = np.zeros_like(x_data1[:, 0])
+    y_data2 = np.ones_like(x_data1[:, 0])
+    y_data = np.concatenate((y_data1, y_data2))
+
+    c = list(zip(x_data, y_data))
+    np.random.shuffle(c)
+    x_data, y_data = zip(*c)
+    x_data, y_data = np.array(x_data), np.array(y_data)
     return x_data, y_data
 
 
@@ -318,8 +351,8 @@ def cost(theta0, theta1):
     m = len(data_x)
     hidden = np.dot(data_x, np.array([theta0, theta1]))
     sigmoid = 1 / (1 + np.exp(-hidden))
-    # J = np.sum(np.square(sigmoid - data_y))
-    J = np.sum(-data_y * ad.log(sigmoid+0.01) - (1 - data_y) * ad.log(1 - sigmoid+0.01))
+    J = np.sum(np.square(sigmoid - data_y))
+    # J = np.sum(-data_y * ad.log(sigmoid+0.01) - (1 - data_y) * ad.log(1 - sigmoid+0.01))
     return J
 
 
@@ -339,48 +372,50 @@ def train():
 
     hidden = ad.matmul(x, w)
     sigmoid = 1 / (1 + ad.exp(-hidden))
-    L = -y * ad.log(sigmoid+0.01) - (1 - y) * ad.log(1 - sigmoid+0.01)
-    # L = ad.reduce_sum(ad.square(sigmoid - y))
+    # L = -y * ad.log(sigmoid+0.01) - (1 - y) * ad.log(1 - sigmoid+0.01)
+    L = ad.reduce_sum(ad.square(sigmoid - y))
 
     w_grad, = ad.gradients(L, [w])
     executor = ad.Executor([L, sigmoid, w_grad])
 
     test_accuracy(w_val, X_val, Y_val)
     batch = 10
-    learning_rate = 0.6
+    learning_rate = 0.9
     max_iters = 5000
     for iteration in range(max_iters):
-        for i in range(int(N/batch)):
-            x_val = X_val[i*batch:i*batch+batch, :]
-            y_val = Y_val[i*batch:i*batch+batch]
+        for i in range(int(N / batch)):
+            x_val = X_val[i * batch:i * batch + batch, :]
+            y_val = Y_val[i * batch:i * batch + batch]
             L_val, predict, w_grad_val = executor.run(feed_dict={w: w_val, x: x_val, y: y_val})
             w_val -= learning_rate * w_grad_val
             TAG_XYZ[0] = float(w_val[0])
             TAG_XYZ[2] = float(w_val[1])
             l = cost(float(w_val[0]), float(w_val[1]))
-            TAG_XYZ[1] = (l - loss_mean)/ loss_std * 3
+            TAG_XYZ[1] = (l - loss_mean) / loss_std * 5
             print(f"iter = {iteration}, w = {w_val}, loss={l}")
             time.sleep(0.01)
     test_accuracy(w_val, X_val, Y_val)
 
 
-def deal_vbo():
-    global w0, w1, loss
+def deal_vbo(w0, w1, loss):
     s = time.time()
     vertices = []
     indices = []
-    edge = (loss.max()-loss.min())*0.01
+    loss_flatten = loss.flatten()
+    loss_flatten.sort()
+    edge_max = loss_flatten[-20]
+    edge_min = loss_flatten[20]
     for i in range(len(w0)):
         for j in range(len(w1)):
             point = [float(w0[i]), float(loss[i][j]), float(w1[j])]
             rgba = getColor(int((float(loss[i][j]) - loss.min()) / (loss.max() - loss.min()) * 255))
-            if float(loss[i][j]) < loss.min()+edge:
-                rgba = (0.0, 1.0, 1.0, 0.5)
-            if float(loss[i][j]) > loss.max()-edge:
-                rgba = (1.0, 0.0, 1.0, 0.5)
+            if float(loss[i][j]) < edge_min:
+                rgba = (1.0, 0.0, 0.0, 0.5)
+            if float(loss[i][j]) > edge_max:
+                rgba = (0.0, 1.0, 0.0, 0.5)
             vertices += rgba[:-1]
             vertices += point
-            if i < len(w0)-1 and j < len(w1)-1:
+            if i < len(w0) - 1 and j < len(w1) - 1:
                 # indices += [i * len(w0) + j, (i + 1) * len(w0) + j, (i + 1) * len(w0) + j + 1, i * len(w0) + j + 1]
                 indices += [i * len(w0) + j,
                             (i + 1) * len(w0) + j,
@@ -397,35 +432,36 @@ def deal_vbo():
 if __name__ == "__main__":
     N = 100
     # X_val, Y_val = gen_2d_data(N)
-    X_val, Y_val = gen_2d_data2(N)
+    X_val, Y_val = gen_2d_data3(N)
     data_x = X_val
     data_y = Y_val
     # w_val = np.zeros(2)
-    w_val = np.array([-10., -7.])
+    # w_val = np.array([-0.0, -1.0])
+    w_val = np.random.random_integers(-10, 10, [2])/1.0  # 初始化权重
+    print(w_val)
 
-    scope = 15
+    scope = 30
     EYE *= scope
     SCALE_K *= 1 / scope
     num = 200
     w0 = np.linspace(-scope, scope, num)
     w1 = np.linspace(-scope, scope, num)
     loss = np.empty(shape=(num, num))
-    # Meshgrid for paramaters
     # w0, w1 = np.meshgrid(w0, w1)
     for i in range(num):
         for j in range(num):
             loss[i, j] = cost(w0[i], w1[j])
     loss_mean = loss.mean()
     loss_std = loss.std()
-    loss = (loss - loss_mean)/ loss_std * 3
+    loss = (loss - loss_mean) / loss_std * 5
 
-    vertices, indices = deal_vbo()
+    vertices, indices = deal_vbo(w0, w1, loss)
 
     vbo_vertices = vbo.VBO(vertices)
     vbo_indices = vbo.VBO(indices, target=GL_ELEMENT_ARRAY_BUFFER)
 
     glutInit()
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH)
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH | GLUT_RGBA)
 
     glutInitWindowSize(WIN_W, WIN_H)
     glutInitWindowPosition(300, 200)
