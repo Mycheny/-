@@ -439,6 +439,7 @@ class OnesLikeOp(Op):
         new_node = Op.__call__(self)
         new_node.inputs = [node_A]
         new_node.name = "Oneslike(%s)" % node_A.name
+        # new_node.name = "array(1)"
         return new_node
 
     def compute(self, node, input_vals):
