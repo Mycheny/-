@@ -317,13 +317,13 @@ def gen_2d_data2(n):
     np.random.seed()
     x_data = np.random.random([n, 2]) * 4 - 2
 
-    # w = np.random.random_integers(-5, 5, [2, 1])/1.0
-    # b = np.random.random_integers(-100, 100, [1])/100
-    # print(f"W = {w} b = {b}")
-    # hidden = np.matmul(x_data, w)[:, 0] + b
-    # y_data = 1 / (1 + np.exp(-hidden))
-
-    y_data = np.where(np.sum(x_data, axis=1) > 0, 0, 1)
+    w = np.random.random_integers(-5, 5, [2, 1])/1.0
+    b = np.random.random_integers(-100, 100, [1])/100
+    print(f"W = {w} b = {b}")
+    hidden = np.matmul(x_data, w)[:, 0] + b
+    y_data = 1 / (1 + np.exp(-hidden))
+    #
+    # y_data = np.where(np.sum(x_data, axis=1) > 0, 0, 1)
 
     # y_data = 1 - np.round(np.mean(np.square(x_data), axis=1), decimals=0)
     return x_data, y_data
@@ -380,7 +380,7 @@ def train():
 
     test_accuracy(w_val, X_val, Y_val)
     batch = 10
-    learning_rate = 0.9
+    learning_rate = 0.1
     max_iters = 5000
     for iteration in range(max_iters):
         for i in range(int(N / batch)):
@@ -432,7 +432,7 @@ def deal_vbo(w0, w1, loss):
 if __name__ == "__main__":
     N = 100
     # X_val, Y_val = gen_2d_data(N)
-    X_val, Y_val = gen_2d_data3(N)
+    X_val, Y_val = gen_2d_data2(N)
     data_x = X_val
     data_y = Y_val
     # w_val = np.zeros(2)
@@ -440,7 +440,7 @@ if __name__ == "__main__":
     w_val = np.random.random_integers(-10, 10, [2])/1.0  # 初始化权重
     print(w_val)
 
-    scope = 30
+    scope = 15
     EYE *= scope
     SCALE_K *= 1 / scope
     num = 200
