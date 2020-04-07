@@ -328,6 +328,7 @@ def gen_2d_data2(n):
     # y_data = 1 - np.round(np.mean(np.square(x_data), axis=1), decimals=0)
     return x_data, y_data
 
+
 def gen_2d_data3(n):
     np.random.seed()
     x_data1 = np.random.rand(int(n/2), 2)*0.2+0.2
@@ -345,12 +346,22 @@ def gen_2d_data3(n):
     return x_data, y_data
 
 
+def gen_2d_data4(n):
+    w = np.random.random_integers(-10, 10, [2, 1])/2.0
+    x_data = np.random.random([n, 2]) * 2 - 1
+    y_data = np.cos(np.sin(np.matmul(x_data, w))).flatten()
+    return x_data, y_data
+
+
 def cost(theta0, theta1):
     global data_x, data_y
     J = 0
     m = len(data_x)
     hidden = np.dot(data_x, np.array([theta0, theta1]))
     sigmoid = 1 / (1 + np.exp(-hidden))
+    #
+    # hidden = np.cos(np.sin(np.matmul(data_x, np.array([theta0, theta1])))).flatten()
+    # sigmoid = hidden
     J = np.sum(np.square(sigmoid - data_y))
     # J = np.sum(-data_y * ad.log(sigmoid+0.01) - (1 - data_y) * ad.log(1 - sigmoid+0.01))
     return J
@@ -371,6 +382,8 @@ def train():
     # 所以一般真实系统实现会提供高阶算子，从而减少数值误差
 
     hidden = ad.matmul(x, w)
+    # hidden = ad.cos(ad.sin(ad.matmul(x, w)))
+    # sigmoid = hidden
     sigmoid = 1 / (1 + ad.exp(-hidden))
     # L = -y * ad.log(sigmoid+0.01) - (1 - y) * ad.log(1 - sigmoid+0.01)
     L = ad.reduce_sum(ad.square(sigmoid - y))
@@ -380,7 +393,7 @@ def train():
 
     test_accuracy(w_val, X_val, Y_val)
     batch = 10
-    learning_rate = 0.1
+    learning_rate = 0.6
     max_iters = 5000
     for iteration in range(max_iters):
         for i in range(int(N / batch)):
@@ -433,6 +446,8 @@ if __name__ == "__main__":
     N = 100
     # X_val, Y_val = gen_2d_data(N)
     X_val, Y_val = gen_2d_data2(N)
+    # X_val, Y_val = gen_2d_data3(N)
+    # X_val, Y_val = gen_2d_data4(N)
     data_x = X_val
     data_y = Y_val
     # w_val = np.zeros(2)

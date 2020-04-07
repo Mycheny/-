@@ -532,6 +532,37 @@ class ReduceSumOp(Op):
         return [output_grad * oneslike_op(node.inputs[0])]
 
 
+class CosOp(Op):
+
+    def __call__(self, node):
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = "cos(%s)" % (node.name)
+        return new_node
+
+    def compute(self, node, input_vals):
+        assert len(input_vals) == 1
+        return np.cos(input_vals[0])
+
+    def gradient(self, node, output_grad):
+        return [output_grad * -sin_op(node.inputs[0])]
+
+
+class SinOp(Op):
+
+    def __call__(self, node):
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = "sin(%s)" % (node.name)
+        return new_node
+
+    def compute(self, node, input_vals):
+        assert len(input_vals) == 1
+        return np.sin(input_vals[0])
+
+    def gradient(self, node, output_grad):
+        return [output_grad * cos_op(node.inputs[0])]
+
 # Create global singletons of operators.
 add_op = AddOp()
 mul_op = MulOp()
@@ -553,6 +584,8 @@ log_op = LogOp()
 exp_op = ExpOp()
 square_op = SquareOp()
 pow_op = PowOp()
+sin_op = SinOp()
+cos_op = CosOp()
 reduce_sum = ReduceSumOp()
 
 
@@ -584,6 +617,18 @@ def log(val):
     if isinstance(val, Tensor):
         return log_op(val)
     return np.log(val)
+
+
+def sin(val):
+    if isinstance(val, Tensor):
+        return sin_op(val)
+    return np.sin(val)
+
+
+def cos(val):
+    if isinstance(val, Tensor):
+        return cos_op(val)
+    return np.cos(val)
 
 
 class Executor:
