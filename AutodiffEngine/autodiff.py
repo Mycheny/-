@@ -488,16 +488,16 @@ class PowOp(Op):
     def __call__(self, node, n):
         new_node = Op.__call__(self)
         new_node.inputs = [node]
-        new_node.const_attr = n
+        new_node.n = n
         new_node.name = "pow(%s, %d)" % (node.name, n)
         return new_node
 
     def compute(self, node, input_vals):
         assert len(input_vals) == 1
-        return np.power(input_vals[0], node.const_attr)
+        return np.power(input_vals[0], node.n)
 
     def gradient(self, node, output_grad):
-        return [output_grad * node.const_attr * pow_op(node.inputs[0], node.const_attr - 1)]
+        return [output_grad * node.n * pow_op(node.inputs[0], node.n - 1)]
 
 
 class SquareOp(Op):
@@ -563,6 +563,139 @@ class SinOp(Op):
     def gradient(self, node, output_grad):
         return [output_grad * cos_op(node.inputs[0])]
 
+
+class TransposeOp(Op):
+    def __call__(self, node, axes=None):
+        if axes is None:
+            axes = [1, 2, 0, 3]
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.axes = axes
+        new_node.name = f"Transpose({node.name})"
+        return new_node
+
+    def compute(self, node, input_vals):
+        assert len(input_vals) == 1
+        return self.transpose(input_vals[0], node.axes)
+
+    def gradient(self, node, output_grad):
+        return [output_grad * self.transpose(node.inputs[0], node.axes)]
+
+    @staticmethod
+    def transpose(value, axes):
+        return np.transpose(value, axes)
+
+
+class Rot90Op(Op):
+    def __call__(self, node):
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = f"Rot90({node.name})"
+        return new_node
+
+    def compute(self, node, input_vals):
+        assert len(input_vals) == 1
+        return self.rot90(input_vals[0])
+
+    def gradient(self, node, output_grad):
+        return [output_grad * self.rot90(node.inputs[0])]
+
+    @staticmethod
+    def rot90(value):
+        return value[::-1, ::-1, ...]
+
+
+class Conv2dOp(Op):
+    def __call__(self, node, filter, strides, padding):
+        new_node = Op.__call__(self)
+        new_node.strides = strides
+        new_node.padding = padding
+        new_node.inputs = [node, filter]
+        new_node.name = f"conv2d({node.name}, {filter.name})"
+        return new_node
+
+    def compute(self, node, input_vals):
+        assert len(input_vals) == 2
+        return self.conv2d(input_vals[0], input_vals[1], node.strides, node.padding)
+
+    def gradient(self, node, output_grad):
+        return [conv2d_op(output_grad, rot90_op(node.inputs[1]), node.strides, "full"),
+                conv2d_op(node.inputs[0], transpose_op(output_grad, axes=[1, 2, 0, 3]), node.strides, "valid")]
+
+    @staticmethod
+    def conv2d(val, filter, strides, padding):
+        def numpy_conv(inputs, filter, _result=None):
+            filter_h, filter_w = filter.shape
+            # 这里先定义一个和输入一样的大空间，但是周围一圈后面会截掉
+            result = np.zeros_like(_result)
+            # 更新下新输入,SAME模式下，会改变HW
+            H, W = inputs.shape
+            # print("new size",H,W)
+            # 卷积核通过输入的每块区域，stride=1，注意输出坐标起始位置
+            for r in range(result.shape[0]):
+                for c in range(result.shape[1]):
+                    # 池化大小的输入区域
+                    cur_input = inputs[r:r + filter_h, c:c + filter_w]
+                    # 和核进行乘法计算
+                    cur_output = cur_input * filter
+                    # 再把所有值求和
+                    conv_sum = np.sum(cur_output)
+                    # 当前点输出值
+                    result[r, c] = conv_sum
+            return result
+
+        def _conv(inputs, filter, strides, padding="valid"):
+            strides = strides[1:3]
+            batch, H, W, C_in = inputs.shape
+            filter_h, filter_w, C_in, C_out = filter.shape
+            # C_out指核对个数，也是最后结果对通道个数
+            C_out = filter.shape[3]
+            # 同样我们任务核对宽高相等
+            if padding == "valid":
+                result = np.zeros([batch, int(np.floor((H - filter_h + 2 * 0) / strides[0] + 1)),
+                                   int(np.floor((W - filter_w + 2 * 0) / strides[1] + 1)), C_out],
+                                  np.float32)
+            elif padding == "same":
+                result = np.zeros([batch, H, W, C_out], np.float32)
+                b, H_new, W_new, C = inputs.shape
+                pad_h = (H_new - 1) * strides[0] + filter_h - H
+                pad_top = int(pad_h / 2)
+                pad_down = pad_h - pad_top
+
+                pad_w = (W_new - 1) * strides[1] + filter_w - W
+                pad_left = int(pad_w / 2)
+                pad_right = pad_w - pad_left
+                inputs = np.pad(inputs, ((0, 0), (pad_top, pad_down), (pad_left, pad_right), (0, 0)), 'constant',
+                                constant_values=(0, 0))
+            else:
+                result = np.zeros([batch,
+                                   int(np.ceil((H - filter_h + 2 * (filter_h - 1)*strides[0]) / strides[0] + 1)),
+                                   int(np.ceil((W - filter_w + 2 * (filter_w - 1)*strides[1]) / strides[1] + 1)),
+                                   C_out], np.float32)
+                pad_h = (result.shape[1] - 1) * strides[0] - H + filter_h
+                pad_top = 1
+                pad_down = pad_h - pad_top
+
+                pad_w = (result.shape[2] - 1) * strides[1] - W + filter_w
+                pad_left = 1
+                pad_right = pad_w - pad_left
+                inputs = np.pad(inputs, ((0, 0), (pad_top, pad_down), (pad_left, pad_right), (0, 0)), 'constant',
+                                constant_values=(0, 0))
+            # 核个数对循环
+            for b in range(batch):
+                for channel_out in range(C_out):
+                    # 输入通道数对循环
+                    for channel_in in range(C_in):
+                        # 当前通道对数据
+                        channel_data = inputs[b, ..., channel_in]
+                        # 采用上面对逻辑，单核单通道卷积,然后累计
+                        result[b, :, :, channel_out] += numpy_conv(channel_data, filter[..., channel_in, channel_out],
+                                                                   _result=result[b, :, :, channel_out])
+            return result
+
+        return _conv(val, filter, strides, padding)
+
+
 # Create global singletons of operators.
 add_op = AddOp()
 mul_op = MulOp()
@@ -587,6 +720,9 @@ pow_op = PowOp()
 sin_op = SinOp()
 cos_op = CosOp()
 reduce_sum = ReduceSumOp()
+conv2d_op = Conv2dOp()
+rot90_op = Rot90Op()
+transpose_op = TransposeOp()
 
 
 def matmul(val, n):
@@ -629,6 +765,14 @@ def cos(val):
     if isinstance(val, Tensor):
         return cos_op(val)
     return np.cos(val)
+
+
+def conv2d(val, filter, strides=None, padding="valid"):
+    if strides is None:
+        strides = [1, 1, 1, 1]
+    if isinstance(val, Tensor):
+        return conv2d_op(val, filter, strides=strides, padding=padding)
+    return Conv2dOp.conv2d(val, filter, strides, padding)
 
 
 class Executor:
@@ -749,20 +893,37 @@ def sum_node_list(node_list):
 
 
 if __name__ == '__main__':
+    import tensorflow as tf
+
     x = Variable(name='x')
     w = Variable(name='w')
     b = Variable(name='b')
     y_ = Variable(name='y')
-
-    y = matmul(x, w) + b
+    strides = [1, 2, 2, 1]
+    y = conv2d(x, w, strides=strides)
+    # y1 = matmul(x, w) + b
     L = square(y - y_)
 
-    w_grad, b_grad = gradients(L, [w, b])
-    executor = Executor([L, y, w_grad, b])
+    w_grad, x_grad = gradients(y, [w, x])
+    executor = Executor([y, w_grad, x_grad])
 
-    x_val = np.array([[3, 2], [1, 1], [1, 1]])
-    w_val = np.array([[2], [1]])
-    b_val = np.array([[1], [2], [3]])
-    y_val = np.array([[0], [1], [1]])
-    a, b, c, d = executor.run(feed_dict={w: w_val, x: x_val, y_: y_val, b: b_val})
+    x_val = np.reshape(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float), (1, 3, 3, 1))
+    w_val = np.reshape(np.array([[1, 2], [3, 4]], dtype=np.float), (2, 2, 1, 1))
+    # np.random.seed(1)
+    # x_val = np.random.random((1, 28, 28, 1))
+    # w_val = np.random.random((3, 4, 1, 1))
+
+    b_val = np.array([[1], [2], [3]], dtype=np.float)
+    y_val = np.array([[0], [1], [1]], dtype=np.float)
+    a, b, c = executor.run(feed_dict={w: w_val, x: x_val, y_: y_val, b: b_val})
+
+    xx = tf.convert_to_tensor(x_val)
+    ww = tf.convert_to_tensor(w_val)
+    yy = tf.nn.conv2d(xx, ww, strides, padding="VALID")
+    ww_grad, xx_grad = tf.gradients(yy, [ww, xx])
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        yyy, www_grad, xxx_grad = sess.run([yy, ww_grad, xx_grad])
+    aaa, bbb, ccc = np.squeeze(a), np.squeeze(b), np.squeeze(c)
+    yyy, www_grad, xxx_grad = np.squeeze(yyy), np.squeeze(www_grad), np.squeeze(xxx_grad)
     print()
