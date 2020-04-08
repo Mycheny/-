@@ -624,8 +624,11 @@ class Conv2dOp(Op):
 
     @staticmethod
     def conv2d(val, filter, strides, padding):
-        def numpy_conv(inputs, filter, _result=None):
+        def numpy_conv(inputs, filter, strides=None, _result=None):
+            if strides is None:
+                strides = [1, 1]
             filter_h, filter_w = filter.shape
+            strides_h, strides_w = strides
             # 这里先定义一个和输入一样的大空间，但是周围一圈后面会截掉
             result = np.zeros_like(_result)
             # 更新下新输入,SAME模式下，会改变HW
@@ -635,7 +638,7 @@ class Conv2dOp(Op):
             for r in range(result.shape[0]):
                 for c in range(result.shape[1]):
                     # 池化大小的输入区域
-                    cur_input = inputs[r:r + filter_h, c:c + filter_w]
+                    cur_input = inputs[r * strides_h:r * strides_h + filter_h, c * strides_w:c * strides_w + filter_w]
                     # 和核进行乘法计算
                     cur_output = cur_input * filter
                     # 再把所有值求和
@@ -690,6 +693,7 @@ class Conv2dOp(Op):
                         channel_data = inputs[b, ..., channel_in]
                         # 采用上面对逻辑，单核单通道卷积,然后累计
                         result[b, :, :, channel_out] += numpy_conv(channel_data, filter[..., channel_in, channel_out],
+                                                                   strides=strides,
                                                                    _result=result[b, :, :, channel_out])
             return result
 
@@ -897,25 +901,29 @@ if __name__ == '__main__':
 
     x = Variable(name='x')
     w = Variable(name='w')
-    b = Variable(name='b')
-    y_ = Variable(name='y')
+
     strides = [1, 2, 2, 1]
     y = conv2d(x, w, strides=strides)
-    # y1 = matmul(x, w) + b
-    L = square(y - y_)
 
     w_grad, x_grad = gradients(y, [w, x])
     executor = Executor([y, w_grad, x_grad])
 
-    x_val = np.reshape(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float), (1, 3, 3, 1))
-    w_val = np.reshape(np.array([[1, 2], [3, 4]], dtype=np.float), (2, 2, 1, 1))
-    # np.random.seed(1)
-    # x_val = np.random.random((1, 28, 28, 1))
-    # w_val = np.random.random((3, 4, 1, 1))
+    # x_val = np.reshape(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float), (1, 3, 3, 1))
+    # x_val = np.reshape(np.array([[1,  2,  3,  4,  5],
+    #                              [6,  7,  8,  9,  10],
+    #                              [11, 12, 13, 14, 15],
+    #                              [16, 17, 18, 19, 20],
+    #                              [21, 22, 23, 24, 25]
+    #                              ],
+    #                             dtype=np.float), (1, 6, 6, 1))
+    w_val = np.reshape(np.array([[1, 2],
+                                 [3, 4]],
+                                dtype=np.float), (2, 2, 1, 1))
+    np.random.seed(1)
+    x_val = np.random.random_integers(0, 3, (1, 5, 5, 1)).astype(np.float64)
+    w_val = np.random.random_integers(0, 3, (2, 2, 1, 1)).astype(np.float64)
 
-    b_val = np.array([[1], [2], [3]], dtype=np.float)
-    y_val = np.array([[0], [1], [1]], dtype=np.float)
-    a, b, c = executor.run(feed_dict={w: w_val, x: x_val, y_: y_val, b: b_val})
+    a, b, c = executor.run(feed_dict={w: w_val, x: x_val})
 
     xx = tf.convert_to_tensor(x_val)
     ww = tf.convert_to_tensor(w_val)
