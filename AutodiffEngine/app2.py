@@ -24,7 +24,7 @@ WIN_W, WIN_H = 640, 480  # 保存窗口宽度和高度的变量
 LEFT_IS_DOWNED = False  # 鼠标左键被按下
 MOUSE_X, MOUSE_Y = 0, 0  # 考察鼠标位移量时保存的起始位置
 
-input_colors = ["#b93f43", "#e4b1b6", "#037ee4"]
+input_colors = ["#b93f43", "#882288", "#037ee4"]
 colors = gradient_color(input_colors, color_sum=300)
 colors = np.array(colors)[:255, :] / 255
 R = colors[:, 0]
